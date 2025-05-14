@@ -1,0 +1,81 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: grafana
+  name: grafana
+  namespace: monitoring
+spec:
+  selector:
+    matchLabels:
+      app: grafana
+  template:
+    metadata:
+      labels:
+        app: grafana
+    spec:
+      initContainers:
+        - name: init-chown-data
+          image: busybox
+          command: ["sh", "-c", "chown -R 472:472 /var/lib/grafana"]
+          volumeMounts:
+            - name: grafana-pv
+              mountPath: /var/lib/grafana
+      securityContext:
+        fsGroup: 472
+        supplementalGroups:
+          - 0
+      containers:
+        - name: grafana
+          image: 474158411984.dkr.ecr.ap-southeast-1.amazonaws.com/custom-grafana:1.2
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: GF_SECURITY_ADMIN_PASSWORD
+              value: password
+            - name: GF_SERVER_ROOT_URL
+              value: https://grafana.staging.automate-app.com/
+            - name: GF_UNIFIED_ALERTING_SCREENSHOTS_CAPTURE
+              value: "true"
+            - name: GF_UNIFIED_ALERTING_SCREENSHOTS_CAPTURE_TIMEOUT
+              value: "30s"
+            - name: GF_PLUGIN_GRAFANA_IMAGE_RENDERER_RENDERING_MODE
+              value: "clustered"
+            - name: GF_PLUGIN_GRAFANA_IMAGE_RENDERER_RENDERING_CLUSTERING_MODE
+              value: "context"
+            - name: GF_PLUGIN_GRAFANA_IMAGE_RENDERER_RENDERING_CLUSTERING_MAX_CONCURRENCY
+              value: "1"
+            - name: GF_PLUGIN_GRAFANA_IMAGE_RENDERER_RENDERING_CLUSTERING_TIMEOUT
+              value: "300"
+          ports:
+            - containerPort: 3000
+              name: http-grafana
+              protocol: TCP
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /robots.txt
+              port: 3000
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 30
+            successThreshold: 1
+            timeoutSeconds: 2
+          livenessProbe:
+            failureThreshold: 3
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            successThreshold: 1
+            tcpSocket:
+              port: 3000
+            timeoutSeconds: 1
+          resources:
+            limits:
+              cpu: 250m
+              memory: 750Mi
+          volumeMounts:
+            - mountPath: /var/lib/grafana
+              name: grafana-pv
+      volumes:
+        - name: grafana-pv
+          persistentVolumeClaim:
+            claimName: grafana-pvc
